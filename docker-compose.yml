@@ -1,0 +1,122 @@
+version: '3'
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.15.2
+    networks:
+      - demo
+    ports:
+      - 9200:9200
+    environment:
+      - "discovery.type=single-node"
+    volumes:
+      - ./docker-volume/elasticsearch/data:/usr/share/elasticsearch/data:rw              # Persistence data
+
+  apmserver:
+    image: docker.elastic.co/apm/apm-server:7.15.2
+    networks:
+      - demo
+    ports:
+      - 8200:8200
+    environment:
+      - "output.elasticsearch.hosts=[\"elasticsearch:9200\"]"
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:7.15.2
+    networks:
+      - demo
+    ports:
+      - 5044:5044
+    volumes:
+      - ./logstash/pipeline:/usr/share/logstash/pipeline:ro                # Pipeline configuration
+    restart: always
+    depends_on:
+      - elasticsearch
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.15.2
+    networks:
+      - demo
+    ports:
+      - 5601:5601
+    restart: always
+    depends_on:
+      - elasticsearch
+
+  mysqldb:
+    image: mysql:8.0.21
+    restart: always
+    command: ["--default-authentication-plugin=mysql_native_password", "--max_allowed_packet=104857600"]
+    networks:
+      - demo
+    environment:
+      MYSQL_ROOT_PASSWORD: root1234
+      MYSQL_DATABASE: demo_library_backend_prod
+    volumes:
+      - ./docker-volume/mysql/data:/var/lib/mysql
+    ports:
+      - 3306:3306
+
+  mongo:
+    image: mongo
+    restart: always
+    ports:
+      - 27017:27017
+    volumes:
+      - './docker-volume:/data/db'
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: root1234
+
+  mongo-express:
+    image: mongo-express
+    ports:
+      - 8081:8081
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: root
+      ME_CONFIG_MONGODB_ADMINPASSWORD: root1234
+      ME_CONFIG_MONGODB_URL: mongodb://root:root1234@mongo:27017/
+
+  postgresdb:
+    image: postgres
+    restart: always
+    volumes:
+      - ./docker-volume/postgresql/data:/var/lib/postgresql
+      - ./docker-volume/postgresql/conf:/etc/postgresql/postgresql.conf
+    ports:
+      - 5432:5432
+    environment:
+      POSTGRES_PASSWORD: root1234
+
+  redis:
+    image: redis:6.0.5-alpine
+    restart: always
+    command: ["redis-server", "--appendonly", "yes"]
+    hostname: redis
+    ports:
+      - 6379:6379
+    networks:
+      - demo
+    volumes:
+      - ./docker-volume/redis/redis.conf:/usr/local/etc/redis/redis.conf
+      - ./docker-volume/redis/data:/data
+
+  solr:
+    image: bitnami/solr:latest
+    restart: always
+    ports:
+     - "8983:8983"
+    networks:
+      - demo 
+    volumes:
+      - ./docker-volume/solr/data:/opt/solr/server/solr/mycores
+  
+  learnometer:
+    build:
+      context: ./learnometer-login-frontend-service
+    ports:
+      - "8081:8081"
+    restart: always
+
+networks:
+  demo:
+    driver: bridge
